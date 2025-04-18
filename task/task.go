@@ -15,35 +15,27 @@ import (
 	"github.com/google/uuid"
 )
 
-type Status int
-
-const (
-	Pending Status = iota
-	Scheduled
-	Running
-	Completed
-	Failed
-)
-
 type Task struct {
-	ID    uuid.UUID
-	Name  string
-	State Status
+	ID          uuid.UUID
+	ContainerID string
+	Name        string
+	State       State
 
 	Image         string
-	Memory        int
-	Disk          int
+	Cpu           float64
+	Memory        int64
+	Disk          int64
 	ExposedPort   nat.PortSet
 	PortBindings  map[string]string
 	RestartPolicy string
 
-	StartTime time.Time
-	EndTime   time.Time
+	StartTime  time.Time
+	FinishTime time.Time
 }
 
 type TaskEvent struct {
 	ID        uuid.UUID
-	State     Status
+	State     State
 	Timestamp time.Time
 	Task      Task
 }
@@ -59,6 +51,7 @@ type Config struct {
 	Memory        int64    // Memory limit in MB
 	Disk          int64    // Disk limit in GB
 	Env           []string // Environment variables to set in the container
+	Cmd           []string // Command to run in the container (optional)
 	RestartPolicy string   // Restart policy for the container: ["", "always", "on-failure", "unless-stopped"]
 
 	// network settings
@@ -66,6 +59,18 @@ type Config struct {
 	AttachStdin  bool        // if stdin should be attached
 	AttachStdout bool        // if stdout should be attached
 	AttachStderr bool        // if stderr should be attached
+}
+
+func NewConfig(t *Task) *Config {
+	return &Config{
+		Name:          t.Name,
+		Image:         t.Image,
+		Cpu:           t.Cpu,
+		Memory:        t.Memory,
+		Disk:          t.Disk,
+		ExposedPort:   t.ExposedPort,
+		RestartPolicy: t.RestartPolicy,
+	}
 }
 
 type Docker struct {
