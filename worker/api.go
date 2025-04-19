@@ -94,12 +94,12 @@ func (api *WorkerAPI) StopTaskHandler(writer http.ResponseWriter, request *http.
 		return
 	}
 	taskUuid, _ := uuid.Parse(taskId)
-	if _, ok := api.Worker.Db[taskUuid]; !ok {
+	taskToStop, ok := api.Worker.Db[taskUuid]
+	if !ok {
 		log.Printf("Task %s not found in the database. \n", taskId)
 		writer.WriteHeader(http.StatusNotFound) // code 404
 		return
 	}
-	taskToStop := api.Worker.Db[taskUuid]
 	taskCopy := *taskToStop // make a copy so that we don't modify the original task in the database
 	taskCopy.State = task.Completed
 	api.Worker.AddTask(&taskCopy)

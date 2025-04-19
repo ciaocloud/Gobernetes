@@ -5,6 +5,6 @@ In worker:
 - Task Queue: when worker receives tasks from the manager, it first adds them to the queue until it is ready to process them.
 - Metrics: worker collects metrics from the tasks it runs and sends them to the manager.
 
-![worker.png](worker.png)
+![worker.png](../fixtures/images/worker.png)
 
-![taskLifecycle.png](../task/taskLifecycle.png)
+![taskLifecycle.png](../fixtures/images/taskLifecycle.png)

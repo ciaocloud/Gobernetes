@@ -87,6 +87,22 @@ func (w *Worker) RunTask() *task.DockerResult {
 	return result
 }
 
+func (w *Worker) RunTasks() {
+	for {
+		if w.Queue.Len() > 0 {
+			result := w.RunTask()
+			if result.Error != nil {
+				log.Printf("Error running task: %v\n", result.Error)
+			}
+		} else {
+			log.Printf("No tasks in the queue.\n")
+		}
+		log.Println("Worker RunTasks next check in 10 seconds...")
+		time.Sleep(10 * time.Second)
+		//log.Printf("### DB: %v\n", len(w.Db))
+	}
+}
+
 func (w *Worker) GetTasks() []*task.Task {
 	tasks := make([]*task.Task, 0, len(w.Db))
 	for _, t := range w.Db {

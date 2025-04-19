@@ -1,3 +1,9 @@
+curl -v -X POST localhost:10087/tasks \
+  --header 'Content-Type: application/json' \
+  --data @fixtures/task.json
+
+curl -v -X DELETE localhost:10087/tasks/21b23589-5d2d-4731-b5c9-a97e9832d021
+
 curl -v --request POST localhost:10086/tasks \
   --header 'Content-Type: application/json' \
   --data '

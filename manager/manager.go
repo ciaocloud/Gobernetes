@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/golang-collections/collections/queue"
 	"github.com/google/uuid"
@@ -126,7 +127,7 @@ func (m *Manager) SendWork() {
 	log.Printf("Task %v has been scheduled: %v\n", t.ID, t.State)
 }
 
-func (m *Manager) UpdateTasks() {
+func (m *Manager) UpdateTasksOnce() {
 	// Update the task state in the task database
 	for _, w := range m.Workers {
 		// for each worker:
@@ -164,6 +165,32 @@ func (m *Manager) UpdateTasks() {
 	}
 }
 
+func (m *Manager) UpdateTasks() {
+	for {
+		log.Printf("Checking workers for task updates\n")
+		m.UpdateTasksOnce()
+		log.Println("Task update completed, manager UpdateTasks thread sleeping for 15 seconds...")
+		time.Sleep(15 * time.Second)
+	}
+}
+
+func (m *Manager) ProcessTasks() {
+	for {
+		log.Println("Processing any tasks in the manager's queue")
+		m.SendWork()
+		log.Println("Tasks sending to workers completed, manager ProcessTasks thread sleeping for 10 seconds...")
+		time.Sleep(10 * time.Second)
+	}
+}
+
 func (m *Manager) AddTask(te task.TaskEvent) {
 	m.Pending.Enqueue(te)
+}
+
+func (m *Manager) GetTasks() []*task.Task {
+	tasks := []*task.Task{}
+	for _, t := range m.TaskDb {
+		tasks = append(tasks, t)
+	}
+	return tasks
 }
