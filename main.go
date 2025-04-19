@@ -23,6 +23,7 @@ func main() {
 		Worker:  &w,
 	}
 	go w.RunTasks()
+	go w.CollectStats()
 	go wApi.Start()
 
 	mHost := "localhost"

@@ -40,6 +40,9 @@ func (api *WorkerAPI) Start() {
 			r.Delete("/", api.StopTaskHandler) // Stop a task by taskID
 		})
 	})
+	api.Router.Route("/stats", func(r chi.Router) {
+		r.Get("/", api.GetStatsHandler) // Get the stats of the worker
+	})
 
 	// Start the HTTP server
 	//go func() {
@@ -106,4 +109,15 @@ func (api *WorkerAPI) StopTaskHandler(writer http.ResponseWriter, request *http.
 
 	log.Printf("Added task %v to stop the container %v.\n", taskToStop.ID, taskToStop.ContainerID)
 	writer.WriteHeader(http.StatusNoContent) // code 204
+}
+
+func (api *WorkerAPI) GetStatsHandler(writer http.ResponseWriter, request *http.Request) {
+	writer.Header().Set("Content-Type", "application/json")
+	writer.WriteHeader(http.StatusOK) // code 200
+	encoder := json.NewEncoder(writer)
+	err := encoder.Encode(api.Worker.Stats)
+	if err != nil {
+		log.Printf("Failed to encode stats: %v", err)
+		writer.WriteHeader(http.StatusInternalServerError) // code 500
+	}
 }
