@@ -12,8 +12,7 @@ func TestCreateAndStopContainer(t *testing.T) {
 		Image: "postgres:13",
 		Env:   []string{"POSTGRES_USER=cube", "POSTGRES_PASSWORD=secret"},
 	}
-	d, err := NewDocker(&c)
-	require.NoError(t, err)
+	d := NewDocker(&c)
 	result := d.Run()
 	require.NoError(t, result.Error)
 	containerId := result.ContainerId

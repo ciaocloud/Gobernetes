@@ -31,6 +31,10 @@ type Task struct {
 
 	StartTime  time.Time
 	FinishTime time.Time
+
+	HealthCheck  string
+	RestartCount int
+	HostPorts    nat.PortMap
 }
 
 type TaskEvent struct {
@@ -78,15 +82,12 @@ type Docker struct {
 	Config Config
 }
 
-func NewDocker(c *Config) (*Docker, error) {
-	d_client, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
-	if err != nil {
-		return nil, err
-	}
+func NewDocker(c *Config) *Docker {
+	d_client, _ := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	return &Docker{
 		Client: d_client,
 		Config: *c,
-	}, nil
+	}
 }
 
 type DockerResult struct {
@@ -175,5 +176,22 @@ func (d *Docker) Stop(id string) DockerResult {
 	return DockerResult{
 		Action: "stop",
 		Result: "success",
+	}
+}
+
+type DockerInspectResponse struct {
+	*container.InspectResponse
+	Error error
+}
+
+func (d *Docker) Inspect(containerID string) DockerInspectResponse {
+	ctx := context.Background()
+	inspect, err := d.Client.ContainerInspect(ctx, containerID)
+	if err != nil {
+		log.Printf("Failed to inspect container %s: %v\n", containerID, err)
+		return DockerInspectResponse{Error: err}
+	}
+	return DockerInspectResponse{
+		InspectResponse: &inspect,
 	}
 }

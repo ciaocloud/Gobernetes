@@ -5,9 +5,12 @@ import (
 	"Gobernetes/worker"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"github.com/docker/go-connections/nat"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/golang-collections/collections/queue"
@@ -193,4 +196,93 @@ func (m *Manager) GetTasks() []*task.Task {
 		tasks = append(tasks, t)
 	}
 	return tasks
+}
+
+func (m *Manager) DoHealthChecks() {
+	for {
+		log.Println("Checking health checks...")
+		for _, t := range m.GetTasks() {
+			if t.State == task.Running && t.RestartCount < 3 {
+				err := m.checkTaskHealth(t)
+				if err != nil && t.RestartCount < 3 {
+					m.restartTask(t)
+				}
+			} else if t.State == task.Failed && t.RestartCount < 3 {
+				m.restartTask(t)
+			}
+		}
+		log.Println("Manager health check completed, manager DoHealthChecks thread sleeping for 60 seconds...")
+		time.Sleep(60 * time.Second)
+	}
+}
+
+func (m *Manager) checkTaskHealth(t *task.Task) error {
+	log.Printf("Checking health of task %s: %s\n", t.ID, t.HealthCheck)
+	w := m.TaskWorkerMap[t.ID]
+	wIp := strings.Split(w, ":")[0]
+	hostPort := getHostPort(t.HostPorts)
+	url := fmt.Sprintf("http://%s:%s%s", wIp, *hostPort, t.HealthCheck)
+	resp, err := http.Get(url)
+	if err != nil {
+		msg := fmt.Sprintf("Error connecting health check for task %s: %v\n", t.ID, err)
+		log.Println(msg)
+		return errors.New(msg)
+	}
+	if resp.StatusCode != http.StatusOK {
+		msg := fmt.Sprintf("Health check failed for task %s: %s\n", t.ID, resp.Status)
+		log.Println(msg)
+		return errors.New(msg)
+	}
+	log.Printf("Health check successful for task %s: %s\n", t.ID, resp.Status)
+	return nil
+}
+
+func getHostPort(ports nat.PortMap) *string {
+	for k, _ := range ports {
+		return &ports[k][0].HostPort
+	}
+	return nil
+}
+
+func (m *Manager) restartTask(t *task.Task) {
+	w := m.TaskWorkerMap[t.ID]
+	t.State = task.Scheduled
+	t.RestartCount++
+	m.TaskDb[t.ID] = t
+
+	te := task.TaskEvent{
+		ID:        uuid.New(),
+		State:     task.Running,
+		Timestamp: time.Now(),
+		Task:      *t,
+	}
+	data, err := json.Marshal(te)
+	if err != nil {
+		log.Printf("Error marshalling task event: %v\n", err)
+		return
+	}
+	url := fmt.Sprintf("http://%s/tasks", w)
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(data))
+	if err != nil {
+		log.Printf("Error connecting to %v: %v\n", w, err)
+		m.Pending.Enqueue(t)
+		return
+	}
+
+	defer resp.Body.Close()
+	decoder := json.NewDecoder(resp.Body)
+	if resp.StatusCode != http.StatusCreated {
+		errResp := worker.ErrResponse{}
+		if err := decoder.Decode(&errResp); err != nil {
+			fmt.Println("Error decoding error response:", err)
+			return
+		}
+		log.Printf("Error response (%D) from worker %s: %s\n", errResp.HttpStatus, w, errResp.Message)
+		return
+	}
+	newTask := task.Task{}
+	if err := decoder.Decode(&newTask); err != nil {
+		log.Printf("Error decoding task response: %v\n", err)
+		return
+	}
 }

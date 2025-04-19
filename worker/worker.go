@@ -26,7 +26,7 @@ func (w *Worker) AddTask(t *task.Task) {
 func (w *Worker) StartTask(t *task.Task) *task.DockerResult {
 	t.StartTime = time.Now()
 	config := task.NewConfig(t)
-	d, _ := task.NewDocker(config)
+	d := task.NewDocker(config)
 	result := d.Run()
 	if result.Error != nil {
 		log.Printf("Error starting task %v: %v\n", t.ID, result.Error)
@@ -43,10 +43,7 @@ func (w *Worker) StartTask(t *task.Task) *task.DockerResult {
 
 func (w *Worker) StopTask(t *task.Task) *task.DockerResult {
 	config := task.NewConfig(t)
-	d, err := task.NewDocker(config)
-	if err != nil {
-		log.Printf("Error creating Docker client: %v\n", err)
-	}
+	d := task.NewDocker(config)
 	result := d.Stop(t.ContainerID)
 	if result.Error != nil {
 		fmt.Println("Error stopping container:", result.Error)
@@ -117,6 +114,37 @@ func (w *Worker) CollectStats() {
 		log.Println("CollectStats next check in 15 seconds...")
 		w.Stats = GetStats()
 		w.Stats.TaskCount = w.TaskCount
+		time.Sleep(15 * time.Second)
+	}
+}
+
+func (w *Worker) InspectTask(t *task.Task) task.DockerInspectResponse {
+	cfg := task.NewConfig(t)
+	d := task.NewDocker(cfg)
+	return d.Inspect(t.ContainerID)
+}
+
+func (w *Worker) UpdateTasks() {
+	for {
+		log.Println("Checking status of tasks")
+		for id, t := range w.Db {
+			if t.State == task.Running {
+				inspect := w.InspectTask(t)
+				if inspect.Error != nil {
+					log.Printf("Error inspecting task %s: %v\n", id, inspect.Error)
+				}
+				if inspect.InspectResponse == nil {
+					log.Printf("No container for running task %s\n", id)
+					w.Db[id].State = task.Failed
+				}
+				if inspect.InspectResponse.State.Status == "exited" {
+					log.Printf("Container for running task %s is exited in non-running state %s\n", id, inspect.InspectResponse.State.Status)
+					w.Db[id].State = task.Failed
+				}
+				w.Db[id].HostPorts = inspect.InspectResponse.NetworkSettings.Ports
+			}
+		}
+		log.Println("UpdateTasks complete. Next check in 15 seconds...")
 		time.Sleep(15 * time.Second)
 	}
 }
