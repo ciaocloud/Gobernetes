@@ -1,6 +1,7 @@
 package main
 
 import (
+	"Gobernetes/manager"
 	"Gobernetes/task"
 	"Gobernetes/worker"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 func main() {
 	host := "localhost"
 	port := 10086
+
 	fmt.Println("Starting worker...")
 	w := worker.Worker{
 		Name:  "test-worker",
@@ -40,7 +42,40 @@ func main() {
 			log.Printf("### DB: %v\n", len(w.Db))
 		}
 	}(&w)
-	api.Start()
+	go api.Start()
+
+	workers := []string{fmt.Sprintf("%s:%d", host, port)}
+	mgr := manager.NewManager(workers)
+	for i := 0; i < 3; i++ {
+		t := task.Task{
+			ID:    uuid.New(),
+			Name:  fmt.Sprintf("test-container-%d", i),
+			State: task.Scheduled,
+			Image: "strm/helloworld-http",
+		}
+		te := task.TaskEvent{
+			ID:    uuid.New(),
+			State: task.Running,
+			Task:  t,
+		}
+		mgr.AddTask(te)
+		mgr.SendWork()
+	}
+
+	go func() {
+		for {
+			fmt.Printf("[Manager] Updating tasks from %d workers\n", len(mgr.Workers))
+			mgr.UpdateTasks()
+			time.Sleep(15 * time.Second)
+		}
+	}()
+
+	for {
+		for _, t := range mgr.TaskDb {
+			fmt.Printf("[Manager] Task ID: %v, State: %d, Worker: %s\n", t.ID, t.State, mgr.TaskWorkerMap[t.ID])
+			time.Sleep(15 * time.Second)
+		}
+	}
 }
 
 //func main() {
