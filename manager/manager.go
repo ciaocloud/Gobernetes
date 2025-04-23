@@ -1,6 +1,8 @@
 package manager
 
 import (
+	"Gobernetes/node"
+	"Gobernetes/scheduler"
 	"Gobernetes/task"
 	"Gobernetes/worker"
 	"bytes"
@@ -40,17 +42,29 @@ type Manager struct {
 	WorkerTaskMap map[string][]uuid.UUID
 	TaskWorkerMap map[uuid.UUID]string
 
-	LastWorker int
+	WorkerNodes []*node.Node
+	Scheduler   scheduler.Scheduler
 }
 
-func NewManager(workers []string) *Manager {
+func NewManager(workers []string, schedulerType string) *Manager {
 	taskDb := make(map[uuid.UUID]*task.Task)
 	eventDb := make(map[uuid.UUID]*task.TaskEvent)
+
 	workerTaskMap := make(map[string][]uuid.UUID)
+	taskWorkerMap := make(map[uuid.UUID]string)
+
 	for i := range workers {
 		workerTaskMap[workers[i]] = []uuid.UUID{}
 	}
-	taskWorkerMap := make(map[uuid.UUID]string)
+
+	var s scheduler.Scheduler
+	switch schedulerType {
+	case "RoundRobin":
+		s = &scheduler.RoundRobin{Name: "RoundRobin"}
+	default:
+		s = &scheduler.RoundRobin{Name: "RoundRobin"}
+	}
+
 	return &Manager{
 		Pending:       *queue.New(),
 		TaskDb:        taskDb,
@@ -58,21 +72,23 @@ func NewManager(workers []string) *Manager {
 		Workers:       workers,
 		WorkerTaskMap: workerTaskMap,
 		TaskWorkerMap: taskWorkerMap,
+		Scheduler:     s,
 	}
 }
 
-func (m *Manager) SelectWorker() string {
-	// Select the next worker in a round-robin fashion
-	// Worker string in the format of <hostname>:<port>
-	var nextWorker int
-	if m.LastWorker+1 < len(m.Workers) {
-		nextWorker = m.LastWorker + 1
-		m.LastWorker++
-	} else {
-		nextWorker = 0
-		m.LastWorker = 0
+func (m *Manager) SelectWorker(t task.Task) (*node.Node, error) {
+	candidates := m.Scheduler.SelectCandidateNodes(t, m.WorkerNodes)
+	if candidates == nil {
+		msg := fmt.Sprintf("No available worker node candidates match resource request for task %v", t.ID)
+		return nil, errors.New(msg)
 	}
-	return m.Workers[nextWorker]
+	scores := m.Scheduler.Score(t, candidates)
+	if scores == nil {
+		msg := fmt.Sprintf("No available worker node candidates match resource request for task %v", t.ID)
+		return nil, errors.New(msg)
+	}
+	selectedNode := m.Scheduler.Pick(scores, candidates)
+	return selectedNode, nil
 }
 
 func (m *Manager) SendWork() {
@@ -83,13 +99,32 @@ func (m *Manager) SendWork() {
 	}
 	// pull a task from manager's queue
 	task_event := m.Pending.Dequeue().(task.TaskEvent)
-	t := task_event.Task
-	w := m.SelectWorker()
-
-	// perform administrative work for the manager to keep track of which worker the task is assigned to
 	m.EventDb[task_event.ID] = &task_event
-	m.WorkerTaskMap[w] = append(m.WorkerTaskMap[w], t.ID)
-	m.TaskWorkerMap[t.ID] = w
+	log.Printf("[manager] Pulled task event %v from pending queue\n", task_event.ID)
+
+	t := task_event.Task
+	// check if the task is an existing one, i.e., already in the task worker map
+	if tw, ok := m.TaskWorkerMap[t.ID]; ok {
+		persistedTask := m.TaskDb[t.ID]
+		if task_event.State == task.Completed && task.ValidateStateTransition(persistedTask.State, task_event.State) {
+			// if the state of the task from the pending queue is completed,
+			// and the running task can be transitioned to completed from its current state,
+			// we stop the running task.
+			m.stopTask(tw, t.ID.String())
+			return
+		}
+	}
+
+	w, err := m.SelectWorker(t)
+	if err != nil {
+		log.Printf("Error selecting worker for task %v: %v\n", t.ID, err)
+		return
+	}
+
+	log.Printf("[manager] Selected worker %s for task %s\n", w.Name, t.ID)
+	// perform administrative work for the manager to keep track of which worker the task is assigned to
+	m.WorkerTaskMap[w.Name] = append(m.WorkerTaskMap[w.Name], t.ID)
+	m.TaskWorkerMap[t.ID] = w.Name
 
 	// set task state to scheduled
 	t.State = task.Scheduled
@@ -102,10 +137,10 @@ func (m *Manager) SendWork() {
 		return
 	}
 	// send task event to the selected worker
-	url := fmt.Sprintf("http://%s/tasks", w)
+	url := fmt.Sprintf("http://%s/tasks", w.Name)
 	resp, err := http.Post(url, "application/json", bytes.NewBuffer(data))
 	if err != nil {
-		log.Printf("Error posting task event to %v: %v\n", w, err)
+		log.Printf("Error posting task event to %v: %v\n", w.Name, err)
 		m.Pending.Enqueue(task_event)
 		return
 	}
@@ -285,4 +320,25 @@ func (m *Manager) restartTask(t *task.Task) {
 		log.Printf("Error decoding task response: %v\n", err)
 		return
 	}
+}
+
+func (m *Manager) stopTask(worker string, taskID string) {
+	url := fmt.Sprintf("http://%s/tasks/%s", worker, taskID)
+	req, err := http.NewRequest("DELETE", url, nil)
+	if err != nil {
+		log.Printf("Error creating request to stop task %s on worker %s: %v\n", taskID, worker, err)
+		return
+	}
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("Error connecting %s to stopp task %s on worker %s: %v\n", url, taskID, worker, err)
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("Error response from worker %s: %v\n", worker, resp.Status)
+		return
+	}
+	log.Printf("Successfully stopped task %s on worker %s\n", taskID, worker)
 }

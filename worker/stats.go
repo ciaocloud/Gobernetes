@@ -3,7 +3,6 @@ package worker
 import (
 	"github.com/c9s/goprocinfo/linux"
 	"log"
-	//"log"
 )
 
 type Stats struct {
