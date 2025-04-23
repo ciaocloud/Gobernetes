@@ -13,8 +13,9 @@ func main() {
 	wHost := "localhost"
 	wPorts := []int{10087, 10088, 10089}
 	fmt.Println("### Starting g8s workers...")
-	for _, wPort := range wPorts {
+	for i, wPort := range wPorts {
 		w := worker.Worker{
+			Name:  fmt.Sprintf("worker-%d", i),
 			Queue: *queue.New(),
 			Db:    make(map[uuid.UUID]*task.Task),
 		}
@@ -24,7 +25,7 @@ func main() {
 			Worker:  &w,
 		}
 		go w.RunTasks()
-		//go w.CollectStats()
+		go w.CollectStats()
 		go wApi.Start()
 	}
 

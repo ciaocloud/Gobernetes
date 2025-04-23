@@ -29,14 +29,14 @@ func (w *Worker) StartTask(t *task.Task) *task.DockerResult {
 	d := task.NewDocker(config)
 	result := d.Run()
 	if result.Error != nil {
-		log.Printf("Error starting task %v: %v\n", t.ID, result.Error)
+		log.Printf("Error starting task %v in %s: %v\n", t.ID, w.Name, result.Error)
 		t.State = task.Failed
 		w.Db[t.ID] = t
 	} else {
 		t.ContainerID = result.ContainerId
 		t.State = task.Running
 		w.Db[t.ID] = t
-		log.Printf("Docker container %s is started for task %v\n", t.ContainerID, t.ID)
+		log.Printf("Docker container %s is started for task %v in %s\n", t.ContainerID, t.ID, w.Name)
 	}
 	return &result
 }
@@ -46,18 +46,18 @@ func (w *Worker) StopTask(t *task.Task) *task.DockerResult {
 	d := task.NewDocker(config)
 	result := d.Stop(t.ContainerID)
 	if result.Error != nil {
-		fmt.Println("Error stopping container:", result.Error)
+		fmt.Println(w.Name, "Error stopping container:", result.Error)
 	}
 	t.FinishTime = time.Now().UTC()
 	t.State = task.Completed
 	w.Db[t.ID] = t
-	log.Printf("Docker container %s is stopped and removed for task %v\n", t.ContainerID, t.ID)
+	log.Printf("Docker container %s is stopped and removed for task %v in %s\n", t.ContainerID, t.ID, w.Name)
 	return &result
 }
 
 func (w *Worker) RunTask() *task.DockerResult {
 	if w.Queue.Len() == 0 {
-		fmt.Println("No tasks in the queue")
+		fmt.Printf("No tasks in the %s's queue\n", w.Name)
 		return &task.DockerResult{
 			Error: nil,
 		}
@@ -90,10 +90,10 @@ func (w *Worker) RunTasks() {
 		if w.Queue.Len() > 0 {
 			result := w.RunTask()
 			if result.Error != nil {
-				log.Printf("Error running task: %v\n", result.Error)
+				log.Printf("Error running task in %s: %v\n", w.Name, result.Error)
 			}
 		} else {
-			log.Printf("No tasks in the queue.\n")
+			log.Printf("No tasks in the queue in %s.\n", w.Name)
 		}
 		log.Println("Worker RunTasks next check in 10 seconds...")
 		time.Sleep(10 * time.Second)
@@ -111,9 +111,10 @@ func (w *Worker) GetTasks() []*task.Task {
 
 func (w *Worker) CollectStats() {
 	for {
-		log.Println("CollectStats next check in 15 seconds...")
+		log.Printf("%s CollectStats next check in 15 seconds...", w.Name)
 		w.Stats = GetStats()
 		w.Stats.TaskCount = w.TaskCount
+		log.Printf("%s's stats: %v", w.Name, w.Stats)
 		time.Sleep(15 * time.Second)
 	}
 }
@@ -126,7 +127,7 @@ func (w *Worker) InspectTask(t *task.Task) task.DockerInspectResponse {
 
 func (w *Worker) UpdateTasks() {
 	for {
-		log.Println("Checking status of tasks")
+		log.Printf("%s checking status of tasks\n", w.Name)
 		for id, t := range w.Db {
 			if t.State == task.Running {
 				inspect := w.InspectTask(t)
@@ -144,7 +145,7 @@ func (w *Worker) UpdateTasks() {
 				w.Db[id].HostPorts = inspect.InspectResponse.NetworkSettings.Ports
 			}
 		}
-		log.Println("UpdateTasks complete. Next check in 15 seconds...")
+		log.Printf("%s UpdateTasks complete. Next check in 15 seconds...\n", w.Name)
 		time.Sleep(15 * time.Second)
 	}
 }
