@@ -1,4 +1,4 @@
-package worker
+package stats
 
 import (
 	"github.com/c9s/goprocinfo/linux"

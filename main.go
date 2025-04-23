@@ -37,7 +37,7 @@ func main() {
 	}
 
 	fmt.Println("### Starting g8s manager...")
-	m := manager.NewManager(workers, "RoundRobin")
+	m := manager.NewManager(workers, "")
 	mApi := manager.ManagerAPI{
 		Address: mHost,
 		Port:    mPort,

@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"Gobernetes/stats"
 	"Gobernetes/task"
 	"errors"
 	"fmt"
@@ -16,7 +17,7 @@ type Worker struct {
 	Queue     queue.Queue
 	Db        map[uuid.UUID]*task.Task
 	TaskCount int
-	Stats     *Stats
+	Stats     *stats.Stats
 }
 
 func (w *Worker) AddTask(t *task.Task) {
@@ -112,7 +113,7 @@ func (w *Worker) GetTasks() []*task.Task {
 func (w *Worker) CollectStats() {
 	for {
 		log.Printf("%s CollectStats next check in 15 seconds...", w.Name)
-		w.Stats = GetStats()
+		w.Stats = stats.GetStats()
 		w.Stats.TaskCount = w.TaskCount
 		log.Printf("%s's stats: %v", w.Name, w.Stats)
 		time.Sleep(15 * time.Second)
