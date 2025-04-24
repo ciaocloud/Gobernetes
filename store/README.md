@@ -1,0 +1,1 @@
+![img.png](../fixtures/images/store.png)

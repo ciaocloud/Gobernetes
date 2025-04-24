@@ -2,11 +2,8 @@ package main
 
 import (
 	"Gobernetes/manager"
-	"Gobernetes/task"
 	"Gobernetes/worker"
 	"fmt"
-	"github.com/golang-collections/collections/queue"
-	"github.com/google/uuid"
 )
 
 func main() {
@@ -14,15 +11,11 @@ func main() {
 	wPorts := []int{10087, 10088, 10089}
 	fmt.Println("### Starting g8s workers...")
 	for i, wPort := range wPorts {
-		w := worker.Worker{
-			Name:  fmt.Sprintf("worker-%d", i),
-			Queue: *queue.New(),
-			Db:    make(map[uuid.UUID]*task.Task),
-		}
+		w := worker.NewWorker(fmt.Sprintf("worker-%d", i), "memory")
 		wApi := worker.WorkerAPI{
 			Address: wHost,
 			Port:    wPort,
-			Worker:  &w,
+			Worker:  w,
 		}
 		go w.RunTasks()
 		go w.CollectStats()
@@ -37,7 +30,7 @@ func main() {
 	}
 
 	fmt.Println("### Starting g8s manager...")
-	m := manager.NewManager(workers, "")
+	m := manager.NewManager(workers, "", "memory")
 	mApi := manager.ManagerAPI{
 		Address: mHost,
 		Port:    mPort,

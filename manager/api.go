@@ -58,7 +58,7 @@ func (api *ManagerAPI) StartTaskHandler(writer http.ResponseWriter, request *htt
 	}
 }
 
-func (api *ManagerAPI) GetTasksHandler(writer http.ResponseWriter, request *http.Request) {
+func (api *ManagerAPI) GetTasksHandler(writer http.ResponseWriter, _ *http.Request) {
 	tasks := api.Manager.GetTasks()
 	writer.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(writer).Encode(tasks); err != nil {
@@ -74,11 +74,12 @@ func (api *ManagerAPI) StopTaskHandler(writer http.ResponseWriter, request *http
 		writer.WriteHeader(http.StatusBadRequest)
 	}
 	taskUuid, _ := uuid.Parse(taskID)
-	taskToStop, ok := api.Manager.TaskDb[taskUuid]
-	if !ok {
+	taskVal, err := api.Manager.TaskDb.Get(taskUuid.String())
+	if err != nil {
 		log.Printf("No task found with UUID %s\n", taskUuid)
 		writer.WriteHeader(http.StatusNotFound)
 	}
+	taskToStop := taskVal.(*task.Task)
 	taskCopy := *taskToStop
 	taskCopy.State = task.Completed
 

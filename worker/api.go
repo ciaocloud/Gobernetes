@@ -77,7 +77,34 @@ func (api *WorkerAPI) StartTaskHandler(w http.ResponseWriter, req *http.Request)
 		w.WriteHeader(http.StatusInternalServerError) // code 500
 	}
 }
-func (api *WorkerAPI) GetTasksHandler(writer http.ResponseWriter, request *http.Request) {
+
+func (api *WorkerAPI) InspectTaskHandler(writer http.ResponseWriter, request *http.Request) {
+	taskId := chi.URLParam(request, "taskID")
+	if taskId == "" {
+		log.Printf("Missing task ID in request. \n")
+		writer.WriteHeader(http.StatusBadRequest) // code 400
+		return
+	}
+	taskUuid, _ := uuid.Parse(taskId)
+	val, err := api.Worker.Db.Get(taskUuid.String())
+	if err != nil {
+		log.Printf("Task %s not found in the database. \n", taskId)
+		writer.WriteHeader(http.StatusNotFound) // code 404
+		return
+	}
+	taskToInspect := val.(*task.Task)
+	resp := api.Worker.InspectTask(taskToInspect)
+	writer.Header().Set("Content-Type", "application/json")
+	writer.WriteHeader(http.StatusOK) // code 200
+	encoder := json.NewEncoder(writer)
+	err = encoder.Encode(resp)
+	if err != nil {
+		log.Printf("Failed to encode task: %v", err)
+		writer.WriteHeader(http.StatusInternalServerError) // code 500
+	}
+}
+
+func (api *WorkerAPI) GetTasksHandler(writer http.ResponseWriter, _ *http.Request) {
 	tasks := api.Worker.GetTasks()
 	writer.Header().Set("Content-Type", "application/json")
 	writer.WriteHeader(http.StatusOK) // code 200
@@ -97,13 +124,15 @@ func (api *WorkerAPI) StopTaskHandler(writer http.ResponseWriter, request *http.
 		return
 	}
 	taskUuid, _ := uuid.Parse(taskId)
-	taskToStop, ok := api.Worker.Db[taskUuid]
-	if !ok {
+	//taskToStop, ok := api.Worker.Db[taskUuid]
+	val, err := api.Worker.Db.Get(taskUuid.String())
+	if err != nil {
 		log.Printf("Task %s not found in the database. \n", taskId)
 		writer.WriteHeader(http.StatusNotFound) // code 404
 		return
 	}
-	taskCopy := *taskToStop // make a copy so that we don't modify the original task in the database
+	taskToStop := val.(*task.Task)
+	taskCopy := *taskToStop
 	taskCopy.State = task.Completed
 	api.Worker.AddTask(&taskCopy)
 
@@ -111,7 +140,7 @@ func (api *WorkerAPI) StopTaskHandler(writer http.ResponseWriter, request *http.
 	writer.WriteHeader(http.StatusNoContent) // code 204
 }
 
-func (api *WorkerAPI) GetStatsHandler(writer http.ResponseWriter, request *http.Request) {
+func (api *WorkerAPI) GetStatsHandler(writer http.ResponseWriter, _ *http.Request) {
 	writer.Header().Set("Content-Type", "application/json")
 	writer.WriteHeader(http.StatusOK) // code 200
 	encoder := json.NewEncoder(writer)
