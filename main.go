@@ -11,7 +11,7 @@ func main() {
 	wPorts := []int{10087, 10088, 10089}
 	fmt.Println("### Starting g8s workers...")
 	for i, wPort := range wPorts {
-		w := worker.NewWorker(fmt.Sprintf("worker-%d", i), "memory")
+		w := worker.NewWorker(fmt.Sprintf("worker-%d", i), "bolt")
 		wApi := worker.WorkerAPI{
 			Address: wHost,
 			Port:    wPort,
@@ -30,7 +30,7 @@ func main() {
 	}
 
 	fmt.Println("### Starting g8s manager...")
-	m := manager.NewManager(workers, "", "memory")
+	m := manager.NewManager(workers, "", "bolt")
 	mApi := manager.ManagerAPI{
 		Address: mHost,
 		Port:    mPort,

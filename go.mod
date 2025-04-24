@@ -11,6 +11,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/shirou/gopsutil/v4 v4.25.3
 	github.com/stretchr/testify v1.10.0
+	go.etcd.io/bbolt v1.4.0
 )
 
 require (

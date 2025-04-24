@@ -49,11 +49,20 @@ type Manager struct {
 
 func NewManager(workers []string, schedulerType string, dbType string) *Manager {
 	var taskDb, eventDb store.Store
+	var err error
 	switch dbType {
-	case "memory":
+	case "in-memory":
 		taskDb = store.NewInMemoryTaskStore()
-		eventDb = store.NewInMemoryTaskEventStore()
-	case "persistent":
+		eventDb = store.NewInMemoryEventStore()
+	case "bolt":
+		taskDb, err = store.NewBoltTaskStore("task.db", 0600, "tasks")
+		if err != nil {
+			log.Fatal(err)
+		}
+		eventDb, err = store.NewBoltEventStore("event.db", 0600, "events")
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	workerTaskMap := make(map[string][]uuid.UUID)

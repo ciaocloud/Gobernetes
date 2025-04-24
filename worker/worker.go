@@ -22,9 +22,16 @@ type Worker struct {
 
 func NewWorker(name, taskDbType string) *Worker {
 	var db store.Store
+	var err error
 	switch taskDbType {
-	case "memory":
+	case "in-memory":
 		db = store.NewInMemoryTaskStore()
+	case "bolt":
+		fname := fmt.Sprintf("%s_tasks.db", name)
+		db, err = store.NewBoltTaskStore(fname, 0600, "tasks")
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 	return &Worker{
 		Name:  name,
